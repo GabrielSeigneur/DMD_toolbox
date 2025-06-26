@@ -24,7 +24,7 @@ def unitVecSphereToCartesianNormal(theta, phi): # Z in on top (as Y, in the firs
 def getReflectedVector(normal, incident):
     return incident - 2 * np.dot(incident, normal) * normal
 
-def osc(i):
+def _osc(i):
     return 0.1 if i%2 == 0 else 0
 
 THRESH = 0.2
@@ -162,7 +162,7 @@ class DMDSetup:
         for i in range(len(self.blazed_longs_indices)):
             self.blazed_order = (self.orderX[self.idx_planar, self.blazed_longs_indices[i]], self.orderY[self.idx_planar, self.blazed_longs_indices[i]])
             ax[1].axvline(x=np.rad2deg(self.latlong_array[int(self.blazed_longs_indices[i])]), color='maroon', linestyle='--', label = f'{self.blazed_orders[i]}')
-            ax[1].text(np.rad2deg(self.latlong_array[self.blazed_longs_indices[i]]), self.phase_shifts[self.idx_planar, :][self.blazed_longs_indices[i]]+ osc(i), \
+            ax[1].text(np.rad2deg(self.latlong_array[self.blazed_longs_indices[i]]), self.phase_shifts[self.idx_planar, :][self.blazed_longs_indices[i]]+ _osc(i), \
                        f'{self.blazed_orders[i]} \n '+r'$\mathrm{lon}_{i} =$'+ f'${np.rad2deg(self.latlong_array[self.blazed_longs_indices[i]]):.2f}'+'^{\circ}$',\
                         color='maroon', usetex = True, fontsize=12) # type: ignore
 
