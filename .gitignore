@@ -3,3 +3,7 @@ __pycache__/
 
 # Nix related env
 .direnv
+
+# pixi environments
+.pixi
+*.egg-info
