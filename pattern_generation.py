@@ -6,6 +6,11 @@ from PIL import Image
 from scipy.interpolate import RectBivariateSpline
 from scipy.optimize import curve_fit
 
+ERROR_DIFFUSION_MATRIX = [
+    (0,-1,7/16),
+    (-1,0,5/16),
+    (-1,1,3/16),
+    (-1,-1,1/16)]
 
 def _quadratic(x: np.ndarray, a:float, b:float) -> np.ndarray:
         """Quadratic function for fitting."""
@@ -34,8 +39,7 @@ class DMDPadding:
     """
     def __init__(
                 self,
-                top: int,bottom: int,
-                left: int, right: int, 
+                padding_dim: tuple = (0, 0, 0, 0),
                 height : int = 1080, width : int = 1920
                 ):
         
@@ -43,22 +47,18 @@ class DMDPadding:
         Initialize the DMD padding with specified dimensions and padding values.
         :param height: Height of the DMD pattern.
         :param width: Width of the DMD pattern.
-        :param top: Number of rows to pad at the top.
-        :param bottom: Number of rows to pad at the bottom.
-        :param left: Number of columns to pad on the left.
-        :param right: Number of columns to pad on the right.
+        : param padding_dim: Tuple of (top, bottom, left, right) padding values.
         """
 
-        if not all(isinstance(x, int) for x in [top, bottom, left, right]):
+        if not all(isinstance(x, int) for x in [*padding_dim]):
             raise TypeError("Padding values must be integers.")
-        
-        
-        self.padding = (top, bottom, left, right)
+
+        self.padding = padding_dim
         self.height = height
         self.width = width
 
         padding_image = np.zeros((height, width), dtype=np.bool_)
-        padding_image[top:height-bottom, left:width-right] = True
+        padding_image[padding_dim[0]:height-padding_dim[1], padding_dim[2]:width-padding_dim[3]] = True
         self.padding_image = padding_image
 
 
@@ -130,7 +130,8 @@ class randomPatternSeries:
                 Image.fromarray(self.patterns[i].astype(np.uint8) * 255).save(file_path)
 
 class analogBWImage:
-    """Type for analog images from an image file or numpy array. This class is meant to handle images that are either grayscale (8 bits/pixel) or RGB (24 bits/pixel), like camera images."""
+    """Type for analog images from an image file or numpy array. This class is meant to handle images that are either grayscale (8 bits/pixel) or RGB (24 bits/pixel), like camera images.
+    Image should be scaled from 0 to 255 for maximal contrast."""
     def __init__(self, img_array: np.ndarray | None = None, img_path: str | None = None):
         if img_array is not None and img_path is not None:
             raise ValueError("Provide either img_array or img_path, not both.")
@@ -152,6 +153,9 @@ class analogBWImage:
         # If image is RGB (24 bits/pixel), convert to grayscale (8 bits/pixel) by selecting the red channel
         if self.img.ndim == 3 and self.img.shape[2] == 3:
             self.img = self.img[:, :, 0]
+
+        # Make sure that the image is in the range [0, 1]
+        self.img = self.img.astype(np.float32) / 255.0
 
 class analogDMDPattern:
     """Type for analog DMD patterns. This class is meant to handle pattern NumPy arrays that are in greyscale, with float values between 0 and 1."""
@@ -200,6 +204,7 @@ class analogDMDPattern:
         
         # Clip the values to ensure they are between 0 and 1
         corrected_pattern = np.clip(corrected_pattern, 0, 1)
+
 
         # self.pattern_corr = corrected_pattern
 
@@ -403,30 +408,136 @@ class randomImagesSeries:
             plt.show()
 
 class binaryMask:
-    """Type for binary masks ready to send to the DMD."""
-    def __init__(self, mask_array: np.ndarray):
-        self.mask_array = mask_array
+    """Type for binary masks ready to send to the DMD. Calibrates, corrects for distortion and performs error-diffusion on the input analog pattern inset.
+    Note that the analog pattern should be a 2D numpy array with values between 0 and 0.9.
+    """
+    def __init__(self, analog_pattern_inset: np.ndarray, padding_dim: tuple = (0, 0, 0, 0), \
+                 DMD_height: int = 1080, DMD_width: int = 1920, \
+                alpha:float = np.deg2rad(-4.5), beta:float = np.deg2rad(-2.5), gamma:float = 1.09):
+        self.analog_pattern = analogDMDPattern(analog_pattern_inset)
+        self.padding = DMDPadding(padding_dim, DMD_height, DMD_width)
+        self.analog_pattern.correct_distortion(alpha, beta, gamma) # Apply distortion correction to the analog pattern
+
+    def calibrate_pattern(self, A, B):
+        img = self.analog_pattern.pattern_corr
+        calibrated_image = np.zeros_like(img)
+        for i in range(img.shape[0]):
+            for j in range(img.shape[1]):
+                y = img[i,j]
+                roots = np.roots([A, B, -y])
+                # Return the root that is between 0 and 1
+                for root in roots:
+                    if root > 0 and root < 1:
+                        calibrated_image[i,j] = root
+                        break
+
+
+        self.calibrated_pattern = calibrated_image
+
+    def perform_error_diffusion(self, ref_image_analog, error_diffusion_matrix = ERROR_DIFFUSION_MATRIX, save_path: str = "./ED Patterns/"):
+        
+
+        if not hasattr(self, 'calibrated_pattern'):
+            raise ValueError("Pattern must be calibrated before performing error diffusion.")
+
+        # Re-scale to 0-0.9 range
+        scaling_factor = np.max(ref_image_analog) / 0.9
+        if scaling_factor <= 0:
+            raise ValueError("Reference image must have positive values for error diffusion.")
+        
+        ref_image_analog = ref_image_analog / scaling_factor
+    
+        ref_image_analog = self.padding.apply_padding(self.calibrated_pattern) # Apply padding to the reference image BEFORE ED (smoother result)
+        Npx, Mpx = ref_image_analog.shape
+        q = np.round(ref_image_analog, 0) # Initialise the 1-bit image
+        v = np.zeros_like(ref_image_analog) # store the error values during the diffusion process
+
+        for i in range(Npx): # iterating through y axis
+
+            for j in range(Mpx): # iteration through x axis
+                v_sum = 0
+
+                for di,dj,w in error_diffusion_matrix:
+                    ni = i+di # computing the coordinates of the neighbours in the direction (di, dj)
+                    nj = j+dj
+                    if ni>0 and nj<Mpx: # valid bounds
+                        v_sum += v[ni,nj]*w # add error from the neighbours, weighted by the weight in error_diffusion_matrix
+
+                q[i,j] = np.round(v_sum+ref_image_analog[i,j], 0)
+                v[i,j] = v_sum+ ref_image_analog[i,j] - q[i,j]
+
+        # If directory does not exist, create it
+        directory = save_path.split('/')[:-1]
+        if not os.path.exists(os.path.join(*directory)):
+            os.makedirs(os.path.join(*directory))
+            
+        # Save the binary mask as a BMP image
+        Image.fromarray((q * 255).astype(np.uint8)).save(os.path.join(save_path)) # ready to be processed by the DMD's software
+        self.binary_mask = q
 
 
 if __name__ == "__main__":
-    # Example usage for distortion - Gaussian Potential
-    height, width = 1080, 1920
-    x, y = np.meshgrid(np.linspace(-width//2, width//2, width), np.linspace(-height//2, height//2, height))
-    gaussian_potential = _gaussian(np.zeros((height, width)), sigma=100)
+    # # Example usage for distortion correction - Gaussian Potential
+    # height, width = 1080, 1920
+    # x, y = np.meshgrid(np.linspace(-width//2, width//2, width), np.linspace(-height//2, height//2, height))
+    # gaussian_potential = _gaussian(np.zeros((height, width)), sigma=100)
 
-    # Create a analogDMDpattern instance
-    gaussian_pattern = analogDMDPattern(gaussian_potential)
+    # # Create a analogDMDpattern instance
+    # gaussian_pattern = analogDMDPattern(gaussian_potential)
 
-    # Correct for distortion with gaussian_corr
-    alpha, beta, gamma = np.deg2rad(-4.5), np.deg2rad(-2.5), 1.09
-    gaussian_pattern.correct_distortion(alpha, beta, gamma)
+    # # Correct for distortion with gaussian_corr
+    # alpha, beta, gamma = np.deg2rad(-4.5), np.deg2rad(-2.5), 1.09
+    # gaussian_pattern.correct_distortion(alpha, beta, gamma)
 
-    fig, ax = plt.subplots(1, 2, figsize=(10, 20))
-    ax[0].imshow(gaussian_potential, cmap='gray')
-    ax[0].set_title("Original Gaussian Potential", usetex = True)
-    ax[0].axis('off')
+    # fig, ax = plt.subplots(1, 2, figsize=(10, 20))
+    # ax[0].imshow(gaussian_potential, cmap='gray')
+    # ax[0].set_title("Original Gaussian Potential", usetex = True)
+    # ax[0].axis('off')
 
-    ax[1].imshow(gaussian_pattern.pattern_corr, cmap='gray')
-    ax[1].set_title(r"Corrected Gaussian Potential (analogDMDPattern) $\alpha="+f"{np.rad2deg(alpha):.2f}$," +r"$\beta="+f"{np.rad2deg(beta):.2f}$,"+ r"$\gamma="+f"{gamma:.2f}$", usetex = True)
-    ax[1].axis('off')
-    
+    # ax[1].imshow(gaussian_pattern.pattern_corr, cmap='gray')
+    # ax[1].set_title(r"Corrected Gaussian Potential (analogDMDPattern) $\alpha="+f"{np.rad2deg(alpha):.2f}$," +r"$\beta="+f"{np.rad2deg(beta):.2f}$,"+ r"$\gamma="+f"{gamma:.2f}$", usetex = True)
+    # ax[1].axis('off')
+
+    # # Example usage for ED (on Cicero)
+    cicero_image = analogBWImage(img_path="Test_Analog_Images/Cicero_BW.jpg")
+
+    # normalise cicero_image to 0-0.9 range (image is encoded in 8 bits, so values are between 0 and 255)
+
+    DMD_height, DMD_width = 1080, 1920
+
+    # Setup the padding for the Cicero image on the DMD array
+    padding_cicero_dim = (
+        cicero_image.img.shape[0] // 2,  # Top padding
+        DMD_height - cicero_image.img.shape[0] // 2 - cicero_image.img.shape[0],  # Bottom padding
+        cicero_image.img.shape[1] // 2,  # Left padding
+        DMD_width - cicero_image.img.shape[1] // 2 - cicero_image.img.shape[1],  # Right padding
+    )
+    padding_cicero = DMDPadding(padding_cicero_dim, DMD_height, DMD_width)
+
+    # Crreate an analogDMDPattern instance for the Cicero image and correct for distortion
+    cicero_pattern = analogDMDPattern(cicero_image.img)
+    # Create a binary mask from the cicero pattern (assuming A = 0.5, B = 0.5 for calibration)
+    cicero_mask = binaryMask(cicero_pattern.pattern, padding_cicero_dim, DMD_height, DMD_width)
+    cicero_mask.calibrate_pattern(0.5, 0.5)
+
+    cicero_mask.perform_error_diffusion(cicero_image.img, save_path="./ED Patterns/Cicero_test/Cicero_image_ED.bmp")
+
+    fig, ax = plt.subplots(2, 2, figsize=(20, 20))
+    ax[0, 0].imshow(cicero_image.img, cmap='gray')
+    ax[0, 0].set_title("Original Cicero Image", usetex = True)
+    ax[0, 0].axis('off')
+
+    ax[0, 1].imshow(cicero_mask.analog_pattern.pattern_corr, cmap='gray')
+    ax[0, 1].set_title(r"Corrected Cicero Image (analogDMDPattern) $\alpha="+f"{np.rad2deg(-4.5):.2f}$," +r"$\beta="+f"{np.rad2deg(-2.5):.2f}$,"+ r"$\gamma=1.09$", usetex = True)
+    ax[0, 1].axis('off')
+
+    ax[1, 0].imshow(cicero_mask.calibrated_pattern, cmap='gray')
+    ax[1, 0].set_title("Calibrated Cicero Pattern", usetex = True)
+    ax[1, 0].axis('off')
+
+    ax[1, 1].imshow(cicero_mask.binary_mask, cmap='gray')
+    ax[1, 1].set_title("Binary Mask after Error Diffusion", usetex = True)
+    ax[1, 1].axis('off')
+
+    plt.tight_layout()
+    plt.show()
