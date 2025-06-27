@@ -5,6 +5,7 @@ __pycache__/
 
 # Plots files
 *.png
+*.bmp
 
 # C extensions
 *.so
