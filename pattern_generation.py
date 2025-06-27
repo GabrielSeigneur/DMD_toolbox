@@ -1,12 +1,30 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
-from PIL import Image
 import os
+
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
+from scipy.interpolate import RectBivariateSpline
+from scipy.optimize import curve_fit
+
 
 def _quadratic(x: np.ndarray, a:float, b:float) -> np.ndarray:
         """Quadratic function for fitting."""
-        return a * x**2 + b
+        return a * x**2 + b * x
+
+def _gaussian(array, sigma):
+    """Returns a 2D Gaussian of standard deviation sigma, centered on the center of the array."""
+    if not isinstance(array, np.ndarray):
+        raise TypeError("Input must be a numpy array.")
+    if array.ndim != 2:
+        raise ValueError("Input array must be 2D.")
+    
+    h, w = array.shape
+    x = np.linspace(-w//2, w//2, w)
+    y = np.linspace(-h//2, h//2, h)
+    X, Y = np.meshgrid(x, y)
+    
+    return np.exp(-(X**2 + Y**2) / (2 * sigma**2))
+
 
 class DMDPadding:
     """
@@ -66,7 +84,6 @@ class DMDPadding:
         plt.axis('off')
         plt.show()
 
-
 class randomPatternSeries:
     """Series of random patterns for DMD calibration."""
     def __init__(self, num_patterns: int, padding: DMDPadding):
@@ -113,7 +130,7 @@ class randomPatternSeries:
                 Image.fromarray(self.patterns[i].astype(np.uint8) * 255).save(file_path)
 
 class analogBWImage:
-    """Type for analog images from an image file or numpy array."""
+    """Type for analog images from an image file or numpy array. This class is meant to handle images that are either grayscale (8 bits/pixel) or RGB (24 bits/pixel), like camera images."""
     def __init__(self, img_array: np.ndarray | None = None, img_path: str | None = None):
         if img_array is not None and img_path is not None:
             raise ValueError("Provide either img_array or img_path, not both.")
@@ -135,7 +152,94 @@ class analogBWImage:
         # If image is RGB (24 bits/pixel), convert to grayscale (8 bits/pixel) by selecting the red channel
         if self.img.ndim == 3 and self.img.shape[2] == 3:
             self.img = self.img[:, :, 0]
+
+class analogDMDPattern:
+    """Type for analog DMD patterns. This class is meant to handle pattern NumPy arrays that are in greyscale, with float values between 0 and 1."""
+    def __init__(self, pattern_array: np.ndarray):
+        if not isinstance(pattern_array, np.ndarray):
+            raise TypeError("pattern_array must be a numpy array.")
+        if pattern_array.ndim != 2:
+            raise ValueError("Pattern must be a 2D array.")
+        if not np.all((pattern_array >= 0) & (pattern_array <= 1)):
+            raise ValueError("Pattern values must be between 0 and 1.")
         
+        self.pattern = pattern_array
+    
+    def correct_distortion(self, alpha, beta, gamma):
+        """Apply distortion correction to the pattern, and recenter the corrected pattern to the center of the image.
+        EDIT: Commented code might work and might be more readable. I'll try to implement it later.
+        Arguments:
+        - alpha, beta, gamma: Distortion coefficients (see DMD Wiki on Notion page for more details).
+        """
+        ### TEST ###
+
+        if not isinstance(alpha, (int, float)) or not isinstance(beta, (int, float)) or not isinstance(gamma, (int, float)):
+            raise TypeError("alpha, beta, and gamma must be numeric values.")
+        
+        # Interpolate the pattern with scipy.interpolate.RectBivariateSpline
+        h, w = self.pattern.shape
+        x = np.linspace(0, 1, w)
+        y = np.linspace(0, 1, h)
+        X, Y = np.meshgrid(x, y)
+        spline = RectBivariateSpline(y, x, self.pattern)
+
+        # Create a grid of corrected coordinates
+        h, w = self.pattern.shape
+        x = np.linspace(0, 1, w)
+        y = np.linspace(0, 1, h)
+        X_corr = np.tan(beta)/(1 + np.tan(beta)*np.tan(alpha)) * ( X / np.sin(beta) - Y / np.cos(alpha))
+        Y_corr = np.tan(alpha)/(1 + np.tan(beta)*np.tan(alpha)) * ( X / np.cos(beta) + Y / np.sin(alpha))
+        Y_corr = Y_corr / gamma  # Apply the gamma correction
+        
+        # Ensure the corrected coordinates are within the bounds of the original pattern
+        X_corr = np.clip(X_corr, 0, 1)
+        Y_corr = np.clip(Y_corr, 0, 1)
+
+        # Evaluate the spline at the corrected coordinates
+        corrected_pattern = spline.ev(Y_corr.flatten(), X_corr.flatten()).reshape(h, w)
+        
+        # Clip the values to ensure they are between 0 and 1
+        corrected_pattern = np.clip(corrected_pattern, 0, 1)
+
+        # self.pattern_corr = corrected_pattern
+
+        # # Let's reconstruct the distortion matrix:
+        # A = np.tan(beta) / (1 + np.tan(beta)*np.tan(alpha)) * (1/np.sin(beta))
+        # B = -np.tan(beta) / (1 + np.tan(beta)*np.tan(alpha)) * (1/np.cos(alpha))
+        # C = np.tan(alpha) / (1 + np.tan(beta)*np.tan(alpha)) * (1/np.cos(beta))
+        # D = np.tan(alpha) / (1 + np.tan(beta)*np.tan(alpha)) * (1/np.sin(alpha))
+
+        # D_matrix = np.array([[A, B], [C, D / gamma]])
+        # try:
+        #     D_inv = np.linalg.inv(D_matrix)
+        # except np.linalg.LinAlgError:
+        #     raise ValueError("Distortion matrix is singular and cannot be inverted.")
+
+        # coords = np.stack([X.flatten(), Y.flatten()], axis=0)  # shape (2, N)
+        # corrected_coords = D_inv @ coords  # shape (2, N)
+        # X_src = corrected_coords[0].reshape(h, w)
+        # Y_src = corrected_coords[1].reshape(h, w)
+
+        # # Clip to bounds (still in normalized coordinates)
+        # X_src = np.clip(X_src, 0, 1)
+        # Y_src = np.clip(Y_src, 0, 1)
+
+        # # Evaluate interpolated image
+        # corrected_pattern = spline.ev(Y_src, X_src)
+        # corrected_pattern = np.clip(corrected_pattern, 0, 1)
+
+        ## Recenter the corrected pattern to the center of the image
+        # Compute center of mass of array
+        center_x = np.sum(np.arange(w) * np.sum(corrected_pattern, axis=0)) / np.sum(corrected_pattern)
+        center_y = np.sum(np.arange(h) * np.sum(corrected_pattern, axis=1)) / np.sum(corrected_pattern)
+        roll_axis = (int(h/2 - center_y), int(w/2 - center_x))
+
+        # Roll the array to recenter it
+        corrected_pattern = np.roll(corrected_pattern, roll_axis, axis=(0, 1))
+
+        self.pattern_corr = corrected_pattern
+        print("Distortion correction applied successfully.")
+      
 class randomImagesSeries:
     """Series of random images for DMD calibration.
     This class helps analyse the series of images taken by a camera in the image plane of a DMD displaying a sequence of patterns generated by an object `randomPattern Series`.
@@ -186,7 +290,6 @@ class randomImagesSeries:
             
             # Compute the average intensity in the ROI
             self.img_intensities[n] = np.mean(tmp_img)
-
             
     def get_group_images_by_density(self, intensity_thresh: float = 0.7):
         """Group images by the density of mirrors ON of the pattern they're associated to. The grouping is done according to the total intensity in the ROI of the image.
@@ -301,11 +404,29 @@ class randomImagesSeries:
 
 class binaryMask:
     """Type for binary masks ready to send to the DMD."""
-    def __init__(self, mask: np.ndarray):
-        if not isinstance(mask, np.ndarray):
-            raise TypeError("Mask must be a numpy array.")
-        if mask.ndim != 2:
-            raise ValueError("Mask must be a 2D array.")
-        self.mask = mask
-        
-        raise NotImplementedError("This class is not implemented yet.")
+    def __init__(self, mask_array: np.ndarray):
+        self.mask_array = mask_array
+
+
+if __name__ == "__main__":
+    # Example usage for distortion - Gaussian Potential
+    height, width = 1080, 1920
+    x, y = np.meshgrid(np.linspace(-width//2, width//2, width), np.linspace(-height//2, height//2, height))
+    gaussian_potential = _gaussian(np.zeros((height, width)), sigma=100)
+
+    # Create a analogDMDpattern instance
+    gaussian_pattern = analogDMDPattern(gaussian_potential)
+
+    # Correct for distortion with gaussian_corr
+    alpha, beta, gamma = np.deg2rad(-4.5), np.deg2rad(-2.5), 1.09
+    gaussian_pattern.correct_distortion(alpha, beta, gamma)
+
+    fig, ax = plt.subplots(1, 2, figsize=(10, 20))
+    ax[0].imshow(gaussian_potential, cmap='gray')
+    ax[0].set_title("Original Gaussian Potential", usetex = True)
+    ax[0].axis('off')
+
+    ax[1].imshow(gaussian_pattern.pattern_corr, cmap='gray')
+    ax[1].set_title(r"Corrected Gaussian Potential (analogDMDPattern) $\alpha="+f"{np.rad2deg(alpha):.2f}$," +r"$\beta="+f"{np.rad2deg(beta):.2f}$,"+ r"$\gamma="+f"{gamma:.2f}$", usetex = True)
+    ax[1].axis('off')
+    
