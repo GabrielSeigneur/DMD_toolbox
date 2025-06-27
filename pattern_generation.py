@@ -462,8 +462,10 @@ class binaryMask:
                     nj = j+dj
                     if ni>0 and nj<Mpx: # valid bounds
                         v_sum += v[ni,nj]*w # add error from the neighbours, weighted by the weight in error_diffusion_matrix
-
-                q[i,j] = np.round(v_sum+ref_image_analog[i,j], 0)
+                if v_sum + np.random.rand() < 0.5: # add a random noise to the error diffusion process
+                    q[i, j] = 0
+                else:
+                    q[i, j] = 1
                 v[i,j] = v_sum+ ref_image_analog[i,j] - q[i,j]
 
         # If directory does not exist, create it
