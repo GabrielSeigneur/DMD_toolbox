@@ -45,9 +45,15 @@ class DMDPadding:
         
         """
         Initialize the DMD padding with specified dimensions and padding values.
-        :param height: Height of the DMD pattern.
-        :param width: Width of the DMD pattern.
-        : param padding_dim: Tuple of (top, bottom, left, right) padding values.
+
+        Parameters
+        ----------
+        padding_dim : tuple, optional
+            Tuple of (top, bottom, left, right) padding values.
+        height : int, optional
+            Height of the DMD pattern.
+        width : int, optional
+            Width of the DMD pattern.
         """
 
         if not all(isinstance(x, int) for x in [*padding_dim]):
@@ -63,7 +69,17 @@ class DMDPadding:
 
 
     def apply_padding(self, pattern: np.ndarray) -> np.ndarray:
-        """Apply padding to a given pattern."""
+        """Apply padding to a given pattern.
+        Parameters
+        ----------
+        pattern : np.ndarray
+            2D numpy array representing the pattern to be padded.
+        
+        Returns
+        -------
+        np.ndarray
+            Padded pattern with the same dimensions as the DMD.
+        """
         if not isinstance(pattern, np.ndarray):
             raise TypeError("Pattern must be a numpy array.")
         if pattern.ndim != 2:
@@ -85,7 +101,7 @@ class DMDPadding:
         plt.show()
 
 class randomPatternSeries:
-    """Series of random patterns for DMD calibration."""
+    """Series of random patterns generated for DMD intensity vs. density of ON mirrors calibration."""
     def __init__(self, num_patterns: int, padding: DMDPadding):
         if not isinstance(num_patterns, int) or num_patterns <= 0:
             raise ValueError("num_patterns must be a positive integer.")
@@ -97,10 +113,24 @@ class randomPatternSeries:
         self.image_path = "./Calibration_Images/" # Where the images will be saved
     
     def build_pattern(self, density: float, dim_tuple: tuple) -> np.ndarray:
-        """
-        Generate a random pattern based on the specified density.
-        :param density: Density of the pattern (0 to 1).
-        :param dim_tuple: Tuple specifying the dimensions of the pattern (height_inset, width_inset).
+        """Generate a random pattern based on the specified density.
+        This function creates a 2D numpy array of boolean values, where True represents an ON mirror and False represents an OFF mirror.
+        Parameters
+        ----------
+        density : float
+            Density of the pattern, ranging from 0 to 1, where 0 means no mirrors ON and 1 means all mirrors ON.
+        dim_tuple : tuple
+            Tuple specifying the dimensions of the pattern (height_inset, width_inset).
+        
+        Returns
+        -------
+        np.ndarray
+            2D numpy array of boolean values representing the pattern.
+        
+        Raises
+        ------
+        ValueError
+            If density is not between 0 and 1, or if dim_tuple does not have exactly two elements.
         """
         pattern = np.zeros(dim_tuple, dtype=np.bool_)
         for i in range(dim_tuple[0]):
@@ -111,7 +141,18 @@ class randomPatternSeries:
         return pattern
     
     def generate_patterns(self, save_path: str = './Calibration_Patterns/'):
-        """Generate random patterns and optionally save them to files."""
+        """Generate random patterns and optionally save them to files.
+        
+        Parameters
+        ----------
+        save_path : str, optional
+            Path to save the generated patterns. If None, patterns are not saved.
+        
+        Raises
+        ------
+        ValueError
+            If save_path is not a valid directory or if it does not end with a '/'.
+        """
         inset_dimensions = (self.padding.height - self.padding.padding[0] - self.padding.padding[1], self.padding.width - self.padding.padding[2] - self.padding.padding[3])
         print(inset_dimensions)
         for i in range(self.num_patterns):
@@ -130,9 +171,38 @@ class randomPatternSeries:
                 Image.fromarray(self.patterns[i].astype(np.uint8) * 255).save(file_path)
 
 class analogBWImage:
-    """Type for analog images from an image file or numpy array. This class is meant to handle images that are either grayscale (8 bits/pixel) or RGB (24 bits/pixel), like camera images.
-    Image should be scaled from 0 to 255 for maximal contrast."""
+    """Type for analog images from an image file or numpy array.
+    This class is meant to handle images that are either grayscale (8 bits/pixel) or RGB (24 bits/pixel), like camera images.
+    Image should be scaled from 0 to 255 for maximal contrast.
+    """
     def __init__(self, img_array: np.ndarray | None = None, img_path: str | None = None):
+        """Initialize the analogBWImage with either an image array or a path to an image file.
+        Parameters
+        ----------
+        img_array : np.ndarray, optional
+            Numpy array representing the image. If provided, img_path should be None.
+        img_path : str, optional
+            Path to the image file. If provided, img_array should be None.
+        
+        Raises
+        ------
+        ValueError
+            If both img_array and img_path are provided or if neither is provided.
+        TypeError
+            If img_array is not a numpy array or if img_path is not a string.
+        FileNotFoundError
+            If the specified image file does not exist.
+        ValueError
+            If the image is not 2D or 3D, or if it is not in the range [0, 1].
+        
+        Notes
+        -----
+        The image is converted to grayscale if it is RGB (24 bits/pixel) by selecting the red channel.
+        The image is normalized to the range [0, 1] by dividing by 255.0.
+        If the image is already in grayscale (8 bits/pixel), it is assumed to be in the range [0, 255] and is converted to [0, 1].
+        If the image is in RGB format, it is converted to grayscale by selecting the red channel.
+        If the image is in grayscale format, it is assumed to be in the range [0, 255] and is converted to [0, 1].
+        """
         if img_array is not None and img_path is not None:
             raise ValueError("Provide either img_array or img_path, not both.")
         if img_array is None and img_path is None:
@@ -158,27 +228,42 @@ class analogBWImage:
         self.img = self.img.astype(np.float32) / 255.0
 
 class analogDMDPattern:
-    """Type for analog DMD patterns. This class is meant to handle pattern NumPy arrays that are in greyscale, with float values between 0 and 1."""
+    """Type for analog DMD patterns.
+    This class is meant to handle pattern NumPy arrays that are in greyscale, with float values between 0 and 1. """
     def __init__(self, pattern_array: np.ndarray):
-        if not isinstance(pattern_array, np.ndarray):
-            raise TypeError("pattern_array must be a numpy array.")
+        """Initialize the analogDMDPattern with a numpy array representing the pattern.
+        Parameters
+        ----------
+        pattern_array : np.ndarray
+            Numpy array representing the DMD pattern. It should be a 2D array with values between 0 and 1.
+        Raises
+        ------
+
+        ValueError
+            If pattern_array is not a 2D array or if its values are not in the range [0, 1].
+        Notes
+        -----
+        The pattern is expected to be a 2D numpy array with float values between 0 and 1, where 0 represents an OFF mirror and 1 represents an ON mirror.
+        The pattern can be used as an input to the generation of binaryMask object, that would eventually be sent over to a DMD.
+        """
+
         if pattern_array.ndim != 2:
             raise ValueError("Pattern must be a 2D array.")
         if not np.all((pattern_array >= 0) & (pattern_array <= 1)):
             raise ValueError("Pattern values must be between 0 and 1.")
         
         self.pattern = pattern_array
-    
-    def correct_distortion(self, alpha, beta, gamma):
-        """Apply distortion correction to the pattern, and recenter the corrected pattern to the center of the image.
-        EDIT: Commented code might work and might be more readable. I'll try to implement it later.
-        Arguments:
-        - alpha, beta, gamma: Distortion coefficients (see DMD Wiki on Notion page for more details).
-        """
-        ### TEST ###
 
-        if not isinstance(alpha, (int, float)) or not isinstance(beta, (int, float)) or not isinstance(gamma, (int, float)):
-            raise TypeError("alpha, beta, and gamma must be numeric values.")
+    def correct_distortion(self, alpha: float, beta: float, gamma: float):
+        """Apply distortion correction to the pattern, and recenter the corrected pattern to the center of the image.
+        The method uses 2D interpolation to correct the distortion based on the provided coefficients.
+        EDIT: Commented code might work and might be more readable. I'll try to implement it later.
+
+        Parameters
+        ----------
+        alpha, beta, gamma: float
+            Distortion coefficients (see DMD Wiki on Notion page for more details).
+        """
         
         # Interpolate the pattern with scipy.interpolate.RectBivariateSpline
         h, w = self.pattern.shape
@@ -248,17 +333,25 @@ class analogDMDPattern:
 class randomImagesSeries:
     """Series of random images for DMD calibration.
     This class helps analyse the series of images taken by a camera in the image plane of a DMD displaying a sequence of patterns generated by an object `randomPattern Series`.
-    Arguments:
-    - dim_camera: Dimensions of the camera images (height, width).
-    - ROI_dim: Optional dimensions of the Region of Interest (ROI) on the camera images (rows left aside to the top of the ROI, to the bottom, columns left aside to the left, and to the right).
-    - images_path: Path to the directory containing the calibration images (should be in a lossless format (PNG or BMP) and named e.g. "0.png", "1.png", ..., "num_images-1.png").
-    - density_array: Array of densities corresponding to the patterns displayed on the DMD during the calibration sequence.
-    Only images should be in the directory, no other files.
-    Note that the ROI doesn't need to include the whole beam, it can be a smaller cutout region that is constantly illuminated throughout the calibration sequence (e.g. a 100x100 pixel square in the center of the image).
     """
 
     def __init__(self,  dim_camera: tuple = (3000, 4000), ROI_dim: tuple | None = None, images_path: str = './Calibration_Images/', density_array: np.ndarray = np.linspace(0, 1, 100)):
-
+        """Initialize the randomImagesSeries with the path to the images and camera dimensions.
+        Parameters
+        ----------
+        dim_camera: tuple
+            Dimensions of the camera images (height, width).
+        ROI_dim: tuple | None
+            Optional dimensions of the Region of Interest (ROI) on the camera images (rows left aside to the top of the ROI, to the bottom, columns left aside to the left, and to the right).
+        images_path: str
+            Path to the directory containing the calibration images (should be in a lossless format (PNG or BMP) and named e.g. "0.png", "1.png", ..., "num_images-1.png").
+        density_array: np.ndarray
+            Array of densities corresponding to the patterns displayed on the DMD during the calibration sequence.
+        Notes
+        -----
+        Only images should be in the directory, no other files.
+        Note that the ROI doesn't need to include the whole beam, it can be a smaller cutout region that is constantly illuminated throughout the calibration sequence (e.g. a 100x100 pixel square in the center of the image).
+    """
         if images_path[-1] != '/':
             images_path += '/'
         self.images_path = images_path
@@ -298,8 +391,10 @@ class randomImagesSeries:
             
     def get_group_images_by_density(self, intensity_thresh: float = 0.7):
         """Group images by the density of mirrors ON of the pattern they're associated to. The grouping is done according to the total intensity in the ROI of the image.
-        Arguments:
-        - intensity_thresh: Threshold for grouping images. If the difference in average intensity between two consecutive images is greater than this value, they are considered to belong to different groups.
+        Parameters
+        ---------
+        intensity_thresh: float
+            Threshold for grouping images. If the difference in average intensity between two consecutive images is greater than this value, they are considered to belong to different groups.
         """
 
         self.next_d = [0]
@@ -327,8 +422,10 @@ class randomImagesSeries:
 
     def plot_intensity_evolution(self, save_path: str | None = None):
         """Plots the average intensity in the ROI vs. the image index.
-        Arguments:
-        - save_path: Optional path to save the plot. If None, the plot is displayed but not saved.
+        Parameters
+        ----------
+        save_path: str | None
+            Optional path to save the plot. If None, the plot is displayed but not saved.
         """
         plt.figure(figsize=(10, 5))
         plt.plot(self.img_intensities, color='b')
@@ -350,8 +447,9 @@ class randomImagesSeries:
 
     def get_fit_coefficients(self):
         """Fit a quadratic function to the average intensity vs. density data and return the coefficients.
-        Returns:
-        - A tuple (a, b) where the fitted function is a * density^2 + b.
+        Returns
+        -------
+        A tuple (a, b) where the fitted function is a * density**2 + b*x.
         """
         if not hasattr(self, 'group_intensities'):
             self.get_group_images_by_density()
@@ -371,8 +469,10 @@ class randomImagesSeries:
     
     def plot_intensity_vs_density(self, save_path: str | None = None):
         """Plot the average intensity in the ROI vs. the density of mirrors ON.
-        Arguments:
-        - save_path: Optional path to save the plot. If None, the plot is displayed but not saved.
+        Parameters
+        ----------
+        save_path: str | None
+            Optional path to save the plot. If None, the plot is displayed but not saved.
         """
         if not hasattr(self, 'fit_coeff'):
             self.get_fit_coefficients()
@@ -414,11 +514,34 @@ class binaryMask:
     def __init__(self, analog_pattern_inset: np.ndarray, padding_dim: tuple = (0, 0, 0, 0), \
                  DMD_height: int = 1080, DMD_width: int = 1920, \
                 alpha:float = np.deg2rad(-4.5), beta:float = np.deg2rad(-2.5), gamma:float = 1.09):
+        """Initialize the binaryMask with an analog pattern inset and optional parameters for padding and distortion correction.
+        Parameters
+        ----------
+        analog_pattern_inset : np.ndarray
+            2D numpy array representing the analog pattern inset. Values should be between 0 and 0.9.
+        padding_dim : tuple, optional
+            Tuple of (top, bottom, left, right) padding values. Default is (0, 0, 0, 0).
+        DMD_height : int, optional
+            Height of the DMD pattern. Default is 1080.
+        DMD_width : int, optional
+            Width of the DMD pattern. Default is 1920.
+        alpha, beta, gamma: float, optional
+            Distortion coefficients for the DMD pattern correction. Default values are -4.5 degrees for alpha, -2.5 degrees for beta, and 1.09 for gamma.
+        """
         self.analog_pattern = analogDMDPattern(analog_pattern_inset)
         self.padding = DMDPadding(padding_dim, DMD_height, DMD_width)
         self.analog_pattern.correct_distortion(alpha, beta, gamma) # Apply distortion correction to the analog pattern
 
     def calibrate_pattern(self, A, B):
+        """Calibrate the analog pattern using the coefficients A and B.
+        The calibration is done by solving the quadratic equation A*x^2 + B*x - y = 0 for each pixel in the analog pattern.
+
+        Parameters
+        ----------
+        A, B : float
+            Coefficients for the quadratic equation used in the calibration.
+        """
+
         img = self.analog_pattern.pattern_corr
         calibrated_image = np.zeros_like(img)
         for i in range(img.shape[0]):
@@ -435,7 +558,28 @@ class binaryMask:
         self.calibrated_pattern = calibrated_image
 
     def perform_error_diffusion(self, ref_image_analog, error_diffusion_matrix = ERROR_DIFFUSION_MATRIX, save_path: str = "./ED Patterns/"):
+        """"Perform error diffusion on the calibrated pattern.
+        The error diffusion is done using the specified error diffusion matrix, which defines the weights and directions of the error diffusion process.
+        The reference image is expected to be a 2D numpy array with values between 0 and 0.9, representing the analog pattern.
+        A stochastic noise is added to the error diffusion process to break the symmetry and avoid artifacts.
         
+        Parameters
+        ----------
+        ref_image_analog : np.ndarray
+            Reference image for error diffusion.
+
+        error_diffusion_matrix : list of tuples, optional
+            Error diffusion matrix to use. Default is ERROR_DIFFUSION_MATRIX.
+
+        save_path : str, optional
+            Path to save the resulting binary mask. Default is "./ED Patterns/".
+        Raises
+        ------
+        ValueError
+            If the reference image is not calibrated or if it does not have positive values for error diffusion.
+        TypeError
+            If the reference image is not a numpy array or if it is not 2D.
+        """
 
         if not hasattr(self, 'calibrated_pattern'):
             raise ValueError("Pattern must be calibrated before performing error diffusion.")
