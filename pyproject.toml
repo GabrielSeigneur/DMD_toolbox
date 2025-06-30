@@ -5,10 +5,10 @@ requires = ["hatchling"]
 [project]
 name = "DMD_toolbox"
 authors = [
-    {name = "Gabriel Seigneur", email = "gabseig@mit.edu"},
+    {name = "Gabriel Seigneur", email = "gabseig@gmail.com"},
     {name = "Hugo Hakem", email = "hugo.hakem@berkeley.edu"}
 ]
-description = ""
+description = "Toolbox to setup and use a Digital Micromirror Device EVM from Texas Instruments."
 license = { file = "LICENSE.md" }
 readme = "README.md"
 version = "0.1.0"
