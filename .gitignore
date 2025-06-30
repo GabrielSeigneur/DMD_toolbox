@@ -140,6 +140,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# pixi environments
+.pixi
+*.egg-info
+
 # Spyder project settings
 .spyderproject
 .spyproject
