@@ -1,15 +1,22 @@
 import os
+from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 from dmd_toolbox.utils import checkdep_usetex
 
+# workaround to allow to run in interactive window
+ROOT = Path(os.getcwd())
+if all(item in ROOT.parts for item in ["src", "dmd_toolbox"]):
+    ROOT = ROOT.parent.parent
 
 def unitVecSphericalToCartesianEquator(lat, lon):
     """ "
-    Spherical coordinates to Cartesian coordinates conversion. Latitude and longitude are defined as in the DMD schematics in the Notion page.
+    Spherical coordinates to Cartesian coordinates conversion.
+    Latitude and longitude are defined as in the DMD schematics in the Notion page.
     Parameters:
     ---------
     lat : float
@@ -21,7 +28,8 @@ def unitVecSphericalToCartesianEquator(lat, lon):
     --------
     np.array
         A 3D vector in Cartesian coordinates (x, y, z).
-    The z-axis is the normal to the DMD, the x-axis is the direction of the tilt of the mirrors in the ON state, and the y-axis is perpendicular to both.
+    The z-axis is the normal to the DMD,
+    the x-axis is the direction of the tilt of the mirrors in the ON state, and the y-axis is perpendicular to both.
     The coordinates are ordered as (x, y, z).
     The x-axis is the direction of the tilt of the mirrors in the ON state, and the y-axis is perpendicular to both.
     The coordinates are ordered as (x, y, z).
@@ -77,7 +85,8 @@ THRESH = 0.2
 class DMDSetup:
     """ "
     Class that models a DMD illuminated by a beam of a given wavlength.
-    Default values for the mirror pitch, the tilt angle and the tilt direction are set to match those of the DLP6500FLQ DMD.
+    Default values for the mirror pitch,
+    the tilt angle and the tilt direction are set to match those of the DLP6500FLQ DMD.
     The DMD modelled here with the clipped corner of its evulation module PCB in the top right corner.
     """
 
@@ -87,7 +96,7 @@ class DMDSetup:
         tilt_direction: float = np.deg2rad(45 + 90),
         mirror_pitch: float = 7.56e-6,
         wavelength: float = 638e-9,
-        path_file: str = "./Plots/",
+        path_file: str | Path = "Plots",
         custom_lat: float | None = None,
     ):
         """ "Initializes the DMD setup with the given parameters.
@@ -95,14 +104,16 @@ class DMDSetup:
         ----------
         custom_lat: float | None (radians)
             Custom latitude in degrees for the planar angle (default is None, which will use the default tilt angle).
-        path_file: str
+        path_file: str, path
             Path to save the results (default is in the directory "Plots" that will be created in the root folder).
+            The path should be taken from project root.
 
         The following parameters' defaults are set to match those of the DLP6500FLQ DMD:
         theta_tilt: float (radians)
             Tilt angle of the mirrors in the ON state, in radians (default is 12 degrees).
         tilt_direction: float (radians)
-            Tilt direction of the mirrors in the ON state, in radians (default is 135 degrees, i.e. towards the clipped corner of the DMD PCB).
+            Tilt direction of the mirrors in the ON state, in radians
+            (default is 135 degrees, i.e. towards the clipped corner of the DMD PCB).
         mirror_pitch: float (meters)
             Pitch of the mirrors in meters (default is 7.56 µm).
         wavelength: float (meters)
@@ -119,7 +130,7 @@ class DMDSetup:
         self.normal_mirror_ON = unitVecSphereToCartesianNormal(
             self.theta_tilt, self.tilt_direction
         )
-        self.path_file = path_file
+        self.path_file = ROOT.joinpath(path_file)
 
         self.latlong_array = np.linspace(-np.pi / 2, np.pi / 2, 500)
         if custom_lat is not None:
@@ -137,7 +148,8 @@ class DMDSetup:
 
     def get_phase_shift_XY(self, k_i):
         """ "
-        Returns the phase shift to a diffracted order (mx, my) in the x and y directions for a given incident wave vector k_i and the normal vector of the mirror.
+        Returns the phase shift to a diffracted order (mx, my) in the x and y directions
+        for a given incident wave vector k_i and the normal vector of the mirror.
         Parameters
         ----------
         k_i: float
@@ -213,7 +225,8 @@ class DMDSetup:
 
     def plot_phase_shift(self):
         """Plots the phase shifts for all k_i vectors and for a given latitude.
-        The first plot is the phase shift for any incident longitude or latitude, and the second plot is the phase shift for any longitude at latitude `lat_planar`.
+        The first plot is the phase shift for any incident longitude or latitude,
+        and the second plot is the phase shift for any longitude at latitude `lat_planar`.
         The blazed orders are marked with vertical dashed lines on both plots.
         """
         fig, ax = plt.subplots(1, 2, figsize=(20, 10))
@@ -302,10 +315,8 @@ class DMDSetup:
         if not os.path.exists(self.path_file):
             os.makedirs(self.path_file)
 
-        if self.path_file[-1] != "/":
-            self.path_file += "/"
 
-        plt.savefig(self.path_file + "Phase_Shifts.png", dpi=300, bbox_inches="tight")
+        plt.savefig(self.path_file.joinpath("Phase_Shifts.png"), dpi=300, bbox_inches="tight")
 
 
 if __name__ == "__main__":
