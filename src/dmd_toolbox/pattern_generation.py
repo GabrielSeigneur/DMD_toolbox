@@ -1,10 +1,12 @@
 import os
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from scipy.interpolate import RectBivariateSpline
 from scipy.optimize import curve_fit
+from dmd_toolbox.utils import checkdep_usetex
 
 ERROR_DIFFUSION_MATRIX = [
     (0, -1, 7 / 16),
@@ -492,9 +494,9 @@ class randomImagesSeries:
         for idx in self.next_d:
             plt.axvline(x=idx, color="r", linestyle="--")
 
-        plt.title("Average Intensity in ROI vs. Image Index", usetex=True)
-        plt.xlabel("Image Index", usetex=True)
-        plt.ylabel("Average Intensity (8-bit encoding)", usetex=True)
+        plt.title("Average Intensity in ROI vs. Image Index")
+        plt.xlabel("Image Index")
+        plt.ylabel("Average Intensity (8-bit encoding)")
         plt.grid(True)
 
         if save_path is not None:
@@ -581,12 +583,9 @@ class randomImagesSeries:
         )
 
         plt.grid(True)
-        plt.title(
-            f"Average Intensity in ROI vs. Density of Mirrors ON.$R^2 = {self.r_squared}$",
-            usetex=True,
-        )
-        plt.xlabel("Density of Mirrors ON", usetex=True)
-        plt.ylabel("Average Intensity in ROI (normalized)", usetex=True)
+        plt.title(f"Average Intensity in ROI vs. Density of Mirrors ON.$R^2 = {self.r_squared}$")
+        plt.xlabel("Density of Mirrors ON")
+        plt.ylabel("Average Intensity in ROI (normalized)")
 
         if save_path is not None:
             if save_path[-1] != "/":
@@ -741,6 +740,7 @@ class binaryMask:
 
 
 if __name__ == "__main__":
+    matplotlib.rcParams['text.usetex'] = checkdep_usetex(True)
     # # Example usage for distortion correction - Gaussian Potential
     # height, width = 1080, 1920
     # x, y = np.meshgrid(np.linspace(-width//2, width//2, width), np.linspace(-height//2, height//2, height))
@@ -755,11 +755,11 @@ if __name__ == "__main__":
 
     # fig, ax = plt.subplots(1, 2, figsize=(10, 20))
     # ax[0].imshow(gaussian_potential, cmap='gray')
-    # ax[0].set_title("Original Gaussian Potential", usetex = True)
+    # ax[0].set_title("Original Gaussian Potential")
     # ax[0].axis('off')
 
     # ax[1].imshow(gaussian_pattern.pattern_corr, cmap='gray')
-    # ax[1].set_title(r"Corrected Gaussian Potential (analogDMDPattern) $\alpha="+f"{np.rad2deg(alpha):.2f}$," +r"$\beta="+f"{np.rad2deg(beta):.2f}$,"+ r"$\gamma="+f"{gamma:.2f}$", usetex = True)
+    # ax[1].set_title(r"Corrected Gaussian Potential (analogDMDPattern) $\alpha="+f"{np.rad2deg(alpha):.2f}$," +r"$\beta="+f"{np.rad2deg(beta):.2f}$,"+ r"$\gamma="+f"{gamma:.2f}$")
     # ax[1].axis('off')
 
     # # Example usage for ED (on Cicero)
@@ -796,7 +796,7 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots(2, 2, figsize=(20, 20))
     ax[0, 0].imshow(cicero_image.img, cmap="gray")
-    ax[0, 0].set_title("Original Cicero Image", usetex=True)
+    ax[0, 0].set_title("Original Cicero Image")
     ax[0, 0].axis("off")
 
     ax[0, 1].imshow(cicero_mask.analog_pattern.pattern_corr, cmap="gray")
@@ -806,17 +806,17 @@ if __name__ == "__main__":
         + r"$\beta="
         + f"{np.rad2deg(-2.5):.2f}$,"
         + r"$\gamma=1.09$",
-        usetex=True,
     )
     ax[0, 1].axis("off")
 
     ax[1, 0].imshow(cicero_mask.calibrated_pattern, cmap="gray")
-    ax[1, 0].set_title("Calibrated Cicero Pattern", usetex=True)
+    ax[1, 0].set_title("Calibrated Cicero Pattern")
     ax[1, 0].axis("off")
 
     ax[1, 1].imshow(cicero_mask.binary_mask, cmap="gray")
-    ax[1, 1].set_title("Binary Mask after Error Diffusion", usetex=True)
+    ax[1, 1].set_title("Binary Mask after Error Diffusion")
     ax[1, 1].axis("off")
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig("cicero_patterns.png", dpi=300, bbox_inches="tight")
+    # plt.show()

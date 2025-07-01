@@ -1,8 +1,10 @@
 import os
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from dmd_toolbox.utils import checkdep_usetex
 
 
 def unitVecSphericalToCartesianEquator(lat, lon):
@@ -200,8 +202,8 @@ class DMDSetup:
 
         self.blazed_orders = [
             (
-                self.orderX[self.idx_planar, self.blazed_longs_indices[i]],
-                self.orderY[self.idx_planar, self.blazed_longs_indices[i]],
+                float(self.orderX[self.idx_planar, self.blazed_longs_indices[i]]),
+                float(self.orderY[self.idx_planar, self.blazed_longs_indices[i]]),
             )
             for i in range(len(self.blazed_longs_indices))
         ]
@@ -217,16 +219,14 @@ class DMDSetup:
         fig, ax = plt.subplots(1, 2, figsize=(20, 10))
         fig.suptitle(
             r"Phase Shifts for $\theta_{tilt}=$"
-            + f" ${np.rad2deg(self.theta_tilt):.1f}"
-            + "^{\circ}$"
+            + f" ${np.rad2deg(self.theta_tilt):.1f}^{{\\circ}}$"
             + r" , $\lambda =$"
             + f" ${self.wavelength * 10**9:.0f}$"
-            + " $\mathrm{nm}$"
+            + " $\\mathrm{nm}$"
             + r" and $d_{mirror} = $"
             + f"${self.mirror_pitch * 1e6:.2f}$"
-            + " $\mathrm{\mu m}$",
-            fontsize="20",
-            usetex=True,
+            + " $\\mathrm{\\mu m}$",
+            fontsize="20"
         )
         # Plot the phase shifts
         ax[0].imshow(self.phase_shifts, extent=[-90, 90, 90, -90], cmap="Greys")
@@ -234,10 +234,10 @@ class DMDSetup:
         cax = divider.append_axes("right", size="3%", pad=0.05)
         cbar = fig.colorbar(ax[0].images[0], cax=cax)
         cbar.ax.tick_params(labelsize=10)
-        cbar.set_label("Phase Shift (a.u.)", usetex=True, fontsize=12)
-        ax[0].set_xlabel("Longitude $\mathrm{lon}_i$(deg)", usetex=True, fontsize=14)
-        ax[0].set_ylabel("Latitude $\mathrm{lat}$ (deg)", usetex=True, fontsize=14)
-        ax[0].set_title("Phase Shift for any incident beam", usetex=True, fontsize=14)
+        cbar.set_label("Phase Shift (a.u.)", fontsize=12)
+        ax[0].set_xlabel("Longitude $\\mathrm{lon}_i$ (deg)", fontsize=14)
+        ax[0].set_ylabel("Latitude $\\mathrm{lat}$ (deg)", fontsize=14)
+        ax[0].set_title("Phase Shift for any incident beam", fontsize=14)
         ax[0].axhline(
             y=np.rad2deg(self.lat_planar),
             color="darkolivegreen",
@@ -248,12 +248,10 @@ class DMDSetup:
             self.theta_tilt - 20,
             np.rad2deg(self.lat_planar) - 2,
             r"$\mathbf{\mathrm{lat}_{i}=}$"
-            + f" ${np.rad2deg(self.lat_planar):.2f}"
-            + "^{\circ}$",
+            + f" ${np.rad2deg(self.lat_planar):.2f}^{{\\circ}}$",
             color="white",
-            fontsize=17,
-            usetex=True,
-        )  # type: ignore
+            fontsize=17
+        )
 
         for i in range(len(self.blazed_longs_indices)):
             ax[0].axvline(
@@ -270,24 +268,18 @@ class DMDSetup:
             self.phase_shifts[self.idx_planar, :],
             color="slategray",
         )
-        ax[1].set_xlabel("Longitude $\mathrm{lon}_i$ (deg)", usetex=True, fontsize=14)
-        ax[1].set_ylabel("Phase Shift (a.u.)", usetex=True, fontsize=14)
+        ax[1].set_xlabel("Longitude $\\mathrm{lon}_i$ (deg)", fontsize=14)
+        ax[1].set_ylabel("Phase Shift (a.u.)", fontsize=14)
         ax[1].set_title(
             "Phase Shift for "
             + r"$\mathrm{lat}_{i}$ = "
-            + f"${np.rad2deg(self.lat_planar):.2f}"
-            + "^{\circ}$",
-            usetex=True,
+            + f"${np.rad2deg(self.lat_planar):.2f}^{{\\circ}}$",
             fontsize=14,
-        )  # type: ignore
+        )
         ax[1].grid()
 
         # Add vertical lines for blazed orders
         for i in range(len(self.blazed_longs_indices)):
-            self.blazed_order = (
-                self.orderX[self.idx_planar, self.blazed_longs_indices[i]],
-                self.orderY[self.idx_planar, self.blazed_longs_indices[i]],
-            )
             ax[1].axvline(
                 x=np.rad2deg(self.latlong_array[int(self.blazed_longs_indices[i])]),
                 color="maroon",
@@ -300,12 +292,10 @@ class DMDSetup:
                 + _osc(i),
                 f"{self.blazed_orders[i]} \n "
                 + r"$\mathrm{lon}_{i} =$"
-                + f"${np.rad2deg(self.latlong_array[self.blazed_longs_indices[i]]):.2f}"
-                + "^{\circ}$",
+                + f"${np.rad2deg(self.latlong_array[self.blazed_longs_indices[i]]):.2f}^{{\\circ}}$",
                 color="maroon",
-                usetex=True,
                 fontsize=12,
-            )  # type: ignore
+            )
 
         # Save to pathfile
         # Check if the path exists, if not create it
@@ -319,6 +309,7 @@ class DMDSetup:
 
 
 if __name__ == "__main__":
+    matplotlib.rcParams['text.usetex'] = checkdep_usetex(True)
     dmd = DMDSetup()
     dmd.get_all_phase_shifts()
     dmd.plot_phase_shift()
