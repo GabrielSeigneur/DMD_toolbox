@@ -1532,7 +1532,7 @@ packages:
 - pypi: ./
   name: dmd-toolbox
   version: 0.1.0
-  sha256: 25b36199119467fb7999a919783290e90d1fa4dbee3fc86e0c03a93d605719fb
+  sha256: 56b9358c27002f59438b8f4257665328be19a56f277de883f33eeee8f06b03dd
   requires_dist:
   - matplotlib
   - numpy
@@ -1548,7 +1548,10 @@ packages:
   - rstcheck ; extra == 'docs'
   - esbonio ; extra == 'docs'
   - pandoc ; extra == 'docs'
-  - dmd-toolbox[docs] ; extra == 'dev'
+  - ruff ; extra == 'lint'
+  - mypy ; extra == 'mypy'
+  - types-pyyaml ; extra == 'mypy'
+  - dmd-toolbox[docs,lint,mypy] ; extra == 'dev'
   requires_python: '>=3.10'
   editable: true
 - pypi: https://files.pythonhosted.org/packages/a2/e9/90b7d243364d3dce38c8c2a1b8c103d7a8d1383c2b24c735fae0eee038dd/doc8-2.0.0-py3-none-any.whl
