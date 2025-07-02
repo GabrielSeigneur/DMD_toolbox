@@ -2,12 +2,13 @@
 # https://github.com/matplotlib/matplotlib/blob/v3.5.3-doc/lib/matplotlib/__init__.py#L426-L442
 
 import functools
+import logging
 import re
+import shutil
 import subprocess
 import sys
 from collections import namedtuple
-import shutil
-import logging
+
 from packaging.version import parse as parse_version
 
 _log = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ def _get_executable_info(name):
         raise ExecutableNotFoundError(message)
     else:
         raise ValueError("Unknown executable: {!r}".format(name))
-    
+
 def checkdep_usetex(s):
     if not s:
         return False
