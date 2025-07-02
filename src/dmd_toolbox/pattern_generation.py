@@ -8,6 +8,7 @@ from PIL import Image
 from scipy.interpolate import RectBivariateSpline
 from scipy.optimize import curve_fit
 
+from dmd_toolbox.pattern_generation import analogBWImage, gaussian, quadratic
 from dmd_toolbox.utils import checkdep_usetex
 
 ERROR_DIFFUSION_MATRIX = [
@@ -21,25 +22,6 @@ ERROR_DIFFUSION_MATRIX = [
 ROOT = Path(os.getcwd())
 if all(item in ROOT.parts for item in ["src", "dmd_toolbox"]):
     ROOT = ROOT.parent.parent
-
-def _quadratic(x: np.ndarray, a: float, b: float) -> np.ndarray:
-    """Quadratic function for fitting."""
-    return a * x**2 + b * x
-
-
-def _gaussian(array, sigma):
-    """Returns a 2D Gaussian of standard deviation sigma, centered on the center of the array."""
-    if not isinstance(array, np.ndarray):
-        raise TypeError("Input must be a numpy array.")
-    if array.ndim != 2:
-        raise ValueError("Input array must be 2D.")
-
-    h, w = array.shape
-    x = np.linspace(-w // 2, w // 2, w)
-    y = np.linspace(-h // 2, h // 2, h)
-    X, Y = np.meshgrid(x, y)
-
-    return np.exp(-(X**2 + Y**2) / (2 * sigma**2))
 
 
 class DMDPadding:
@@ -190,72 +172,6 @@ class randomPatternSeries:
             file_path = save_path.joinpath(f"pattern_{i}.png")
             Image.fromarray(self.patterns[i].astype(np.uint8) * 255).save(file_path)
 
-
-class analogBWImage:
-    """Type for analog images from an image file or numpy array.
-    This class is meant to handle images that are either grayscale (8 bits/pixel)
-    or RGB (24 bits/pixel), like camera images.
-    Image should be scaled from 0 to 255 for maximal contrast.
-    """
-
-    def __init__(
-        self, img_array: np.ndarray | None = None, img_path: str | Path | None = None
-    ):
-        """Initialize the analogBWImage with either an image array or a path to an image file.
-        Parameters
-        ----------
-        img_array : np.ndarray, optional
-            Numpy array representing the image. If provided, img_path should be None.
-        img_path : str or Path, optional
-            Path to the image file. If provided, img_array should be None.
-            The path should be taken from project root.
-
-        Raises
-        ------
-        ValueError
-            If both img_array and img_path are provided or if neither is provided.
-        TypeError
-            If img_array is not a numpy array or if img_path is not a string.
-        FileNotFoundError
-            If the specified image file does not exist.
-        ValueError
-            If the image is not 2D or 3D, or if it is not in the range [0, 1].
-
-        Notes
-        -----
-        The image is converted to grayscale if it is RGB (24 bits/pixel) by selecting the red channel.
-        The image is normalized to the range [0, 1] by dividing by 255.0.
-        If the image is already in grayscale (8 bits/pixel),
-        it is assumed to be in the range [0, 255] and is converted to [0, 1].
-        If the image is in RGB format, it is converted to grayscale by selecting the red channel.
-        If the image is in grayscale format, it is assumed to be in the range [0, 255] and is converted to [0, 1].
-        """
-        if img_array is not None and img_path is not None:
-            raise ValueError("Provide either img_array or img_path, not both.")
-        if img_array is None and img_path is None:
-            raise ValueError("One of img_array or img_path must be provided.")
-
-        if img_array is not None:
-            if not isinstance(img_array, np.ndarray):
-                raise TypeError("img_array must be a numpy array.")
-            self.img = img_array
-        elif img_path is not None:
-            img_path = ROOT.joinpath(img_path)
-            if not img_path.is_file():
-                raise FileNotFoundError(f"Image file {img_path} does not exist.")
-            self.img = np.array(Image.open(img_path))
-
-        if self.img.ndim != 2 and self.img.ndim != 3:
-            raise ValueError("Image must be 2D or 3D (grayscale or RGB).")
-
-        # If image is RGB (24 bits/pixel), convert to grayscale (8 bits/pixel) by selecting the red channel
-        if self.img.ndim == 3 and self.img.shape[2] == 3:
-            self.img = self.img[:, :, 0]
-
-        # Make sure that the image is in the range [0, 1]
-        self.img = self.img.astype(np.float32) / 255.0
-
-
 class analogDMDPattern:
     """Type for analog DMD patterns.
     This class is meant to handle pattern NumPy arrays that are in greyscale, with float values between 0 and 1."""
@@ -330,33 +246,6 @@ class analogDMDPattern:
         # Clip the values to ensure they are between 0 and 1
         corrected_pattern = np.clip(corrected_pattern, 0, 1)
 
-        # self.pattern_corr = corrected_pattern
-
-        # # Let's reconstruct the distortion matrix:
-        # A = np.tan(beta) / (1 + np.tan(beta)*np.tan(alpha)) * (1/np.sin(beta))
-        # B = -np.tan(beta) / (1 + np.tan(beta)*np.tan(alpha)) * (1/np.cos(alpha))
-        # C = np.tan(alpha) / (1 + np.tan(beta)*np.tan(alpha)) * (1/np.cos(beta))
-        # D = np.tan(alpha) / (1 + np.tan(beta)*np.tan(alpha)) * (1/np.sin(alpha))
-
-        # D_matrix = np.array([[A, B], [C, D / gamma]])
-        # try:
-        #     D_inv = np.linalg.inv(D_matrix)
-        # except np.linalg.LinAlgError:
-        #     raise ValueError("Distortion matrix is singular and cannot be inverted.")
-
-        # coords = np.stack([X.flatten(), Y.flatten()], axis=0)  # shape (2, N)
-        # corrected_coords = D_inv @ coords  # shape (2, N)
-        # X_src = corrected_coords[0].reshape(h, w)
-        # Y_src = corrected_coords[1].reshape(h, w)
-
-        # # Clip to bounds (still in normalized coordinates)
-        # X_src = np.clip(X_src, 0, 1)
-        # Y_src = np.clip(Y_src, 0, 1)
-
-        # # Evaluate interpolated image
-        # corrected_pattern = spline.ev(Y_src, X_src)
-        # corrected_pattern = np.clip(corrected_pattern, 0, 1)
-
         ## Recenter the corrected pattern to the center of the image
         # Compute center of mass of array
         center_x = np.sum(np.arange(w) * np.sum(corrected_pattern, axis=0)) / np.sum(
@@ -423,7 +312,7 @@ class randomImagesSeries:
 
         for n in range(self.num_images):
             tmp_img_path = self.images_path.joinpath(f"{n}.{image_format}")
-            tmp_img = analogBWImage(img_path=tmp_img_path).img
+            tmp_img = analogBWImage(img_path=tmp_img_path)
             if tmp_img.size != dim_camera:
                 raise ValueError(
                     f"Image {n} has incorrect dimensions: {tmp_img.size}. Expected: {dim_camera}."
@@ -536,7 +425,7 @@ class randomImagesSeries:
 
         # Fit the quadratic function
         popt, popcov = curve_fit(
-            _quadratic,
+            quadratic,
             np.array(list(self.group_intensities.keys())),
             np.array(list(self.group_intensities.values())),
             p0=[1, 0],
@@ -547,7 +436,7 @@ class randomImagesSeries:
         self.fit_cov = popcov
 
         # Compute the R-squared value
-        residuals = np.array(list(self.group_intensities.values())) - _quadratic(
+        residuals = np.array(list(self.group_intensities.values())) - quadratic(
             np.array(list(self.group_intensities.keys())), *popt
         )
         ss_res = np.sum(residuals**2)
@@ -579,7 +468,7 @@ class randomImagesSeries:
         plt.scatter(densities, intensities, color="r", label="Measured Intensities")
         plt.plot(
             densities,
-            _quadratic(densities, *self.fit_coeff),
+            quadratic(densities, *self.fit_coeff),
             color="r",
             label="Fitted Quadratic Function",
         )
@@ -590,8 +479,8 @@ class randomImagesSeries:
         # Add a fill in-between with the uncertainty values from popcov
         a, b = self.fit_coeff
         uncertainties = np.sqrt(np.diag(self.fit_cov))
-        lower_bound = _quadratic(densities, a - uncertainties[0], b - uncertainties[1])
-        upper_bound = _quadratic(densities, a + uncertainties[0], b + uncertainties[1])
+        lower_bound = quadratic(densities, a - uncertainties[0], b - uncertainties[1])
+        upper_bound = quadratic(densities, a + uncertainties[0], b + uncertainties[1])
 
         plt.fill_between(
             densities,
@@ -769,7 +658,7 @@ if __name__ == "__main__":
     # # Example usage for distortion correction - Gaussian Potential
     # height, width = 1080, 1920
     # x, y = np.meshgrid(np.linspace(-width//2, width//2, width), np.linspace(-height//2, height//2, height))
-    # gaussian_potential = _gaussian(np.zeros((height, width)), sigma=100)
+    # gaussian_potential = gaussian(np.zeros((height, width)), sigma=100)
 
     # # Create a analogDMDpattern instance
     # gaussian_pattern = analogDMDPattern(gaussian_potential)
@@ -798,19 +687,19 @@ if __name__ == "__main__":
 
     # Setup the padding for the Cicero image on the DMD array
     padding_cicero_dim = (
-        cicero_image.img.shape[0] // 2,  # Top padding
+        cicero_image.shape[0] // 2,  # Top padding
         DMD_height
-        - cicero_image.img.shape[0] // 2
-        - cicero_image.img.shape[0],  # Bottom padding
-        cicero_image.img.shape[1] // 2,  # Left padding
+        - cicero_image.shape[0] // 2
+        - cicero_image.shape[0],  # Bottom padding
+        cicero_image.shape[1] // 2,  # Left padding
         DMD_width
-        - cicero_image.img.shape[1] // 2
-        - cicero_image.img.shape[1],  # Right padding
+        - cicero_image.shape[1] // 2
+        - cicero_image.shape[1],  # Right padding
     )
     padding_cicero = DMDPadding(padding_cicero_dim, DMD_height, DMD_width)
 
     # Crreate an analogDMDPattern instance for the Cicero image and correct for distortion
-    cicero_pattern = analogDMDPattern(cicero_image.img)
+    cicero_pattern = analogDMDPattern(cicero_image)
     # Create a binary mask from the cicero pattern (assuming A = 0.5, B = 0.5 for calibration)
     cicero_mask = binaryMask(
         cicero_pattern.pattern, padding_cicero_dim, DMD_height, DMD_width
@@ -818,11 +707,11 @@ if __name__ == "__main__":
     cicero_mask.calibrate_pattern(0.5, 0.5)
 
     cicero_mask.perform_error_diffusion(
-        cicero_image.img, save_path="ED Patterns/Cicero_test/Cicero_image_ED.bmp"
+        cicero_image, save_path="ED Patterns/Cicero_test/Cicero_image_ED.bmp"
     )
 
     fig, ax = plt.subplots(2, 2, figsize=(20, 20))
-    ax[0, 0].imshow(cicero_image.img, cmap="gray")
+    ax[0, 0].imshow(cicero_image, cmap="gray")
     ax[0, 0].set_title("Original Cicero Image")
     ax[0, 0].axis("off")
 
