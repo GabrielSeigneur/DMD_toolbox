@@ -13,12 +13,14 @@ license = { file = "LICENSE.md" }
 readme = "README.md"
 version = "0.1.0"
 
-requires-python = ">= 3.11"
+requires-python = ">=3.10"
 dependencies = [
     "matplotlib",
     "numpy",
     "scipy",
     "pillow",
+    "ipykernel",
+    "pip",
 ]
 
 [project.optional-dependencies]
@@ -32,8 +34,9 @@ docs = [
     "esbonio",
     "pandoc",
 ]
-
-dev = ["DMD_toolbox[docs]"]
+lint = ["ruff"]
+mypy = ["mypy", "types-PyYAML"]
+dev = ["DMD_toolbox[docs, lint, mypy]"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dmd_toolbox"]
@@ -55,4 +58,17 @@ default = { solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 dev = { features = ["docs"], solve-group = "default" }
 
+[tool.ruff]
+line-length = 120
+extend-include = ["*.ipynb"]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+ignore_missing_imports = true
+explicit_package_bases = true
+check_untyped_defs = true
+warn_unreachable = true
 

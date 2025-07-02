@@ -1,10 +1,14 @@
 import os
+from pathlib import Path
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from scipy.interpolate import RectBivariateSpline
 from scipy.optimize import curve_fit
+
+from dmd_toolbox.utils import checkdep_usetex
 
 ERROR_DIFFUSION_MATRIX = [
     (0, -1, 7 / 16),
@@ -13,6 +17,10 @@ ERROR_DIFFUSION_MATRIX = [
     (-1, -1, 1 / 16),
 ]
 
+# workaround to allow to run in interactive window
+ROOT = Path(os.getcwd())
+if all(item in ROOT.parts for item in ["src", "dmd_toolbox"]):
+    ROOT = ROOT.parent.parent
 
 def _quadratic(x: np.ndarray, a: float, b: float) -> np.ndarray:
     """Quadratic function for fitting."""
@@ -37,7 +45,8 @@ def _gaussian(array, sigma):
 class DMDPadding:
     """
     Padding for DMD patterns.
-    The padding is defined as a tuple of (top, bottom, left, right), and is meant to be fully illuminated by the incident beam.
+    The padding is defined as a tuple of (top, bottom, left, right),
+    and is meant to be fully illuminated by the incident beam.
     Careful about the Y axis: it is point down, so top is the first row and bottom is the last row.
     """
 
@@ -119,11 +128,12 @@ class randomPatternSeries:
         self.patterns = np.zeros(
             (num_patterns, self.padding.height, self.padding.width), dtype=np.bool_
         )
-        self.image_path = "./Calibration_Images/"  # Where the images will be saved
+        self.image_path = ROOT.joinpath("Calibration_Images") # Where the images will be saved
 
     def build_pattern(self, density: float, dim_tuple: tuple) -> np.ndarray:
         """Generate a random pattern based on the specified density.
-        This function creates a 2D numpy array of boolean values, where True represents an ON mirror and False represents an OFF mirror.
+        This function creates a 2D numpy array of boolean values,
+        where True represents an ON mirror and False represents an OFF mirror.
         Parameters
         ----------
         density : float
@@ -149,19 +159,23 @@ class randomPatternSeries:
 
         return pattern
 
-    def generate_patterns(self, save_path: str = "./Calibration_Patterns/"):
+    def generate_patterns(self, save_path: str|Path="Calibration_Patterns"):
         """Generate random patterns and optionally save them to files.
 
         Parameters
         ----------
-        save_path : str, optional
+        save_path : str or Path, optional
             Path to save the generated patterns. If None, patterns are not saved.
+            The path should be taken from project root.
 
         Raises
         ------
         ValueError
             If save_path is not a valid directory or if it does not end with a '/'.
         """
+
+        save_path = ROOT.joinpath(save_path)
+
         inset_dimensions = (
             self.padding.height - self.padding.padding[0] - self.padding.padding[1],
             self.padding.width - self.padding.padding[2] - self.padding.padding[3],
@@ -171,33 +185,30 @@ class randomPatternSeries:
             pattern_temp = self.build_pattern(self.density_array[i], inset_dimensions)
             self.patterns[i] = self.padding.apply_padding(pattern_temp)
 
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
+            save_path.mkdir(parents=True, exist_ok=True)
 
-            if save_path[-1] != "/":
-                save_path += "/"
-
-            if save_path is not None:
-                file_path = os.path.join(save_path, f"pattern_{i}.png")
-                Image.fromarray(self.patterns[i].astype(np.uint8) * 255).save(file_path)
+            file_path = save_path.joinpath(f"pattern_{i}.png")
+            Image.fromarray(self.patterns[i].astype(np.uint8) * 255).save(file_path)
 
 
 class analogBWImage:
     """Type for analog images from an image file or numpy array.
-    This class is meant to handle images that are either grayscale (8 bits/pixel) or RGB (24 bits/pixel), like camera images.
+    This class is meant to handle images that are either grayscale (8 bits/pixel)
+    or RGB (24 bits/pixel), like camera images.
     Image should be scaled from 0 to 255 for maximal contrast.
     """
 
     def __init__(
-        self, img_array: np.ndarray | None = None, img_path: str | None = None
+        self, img_array: np.ndarray | None = None, img_path: str | Path | None = None
     ):
         """Initialize the analogBWImage with either an image array or a path to an image file.
         Parameters
         ----------
         img_array : np.ndarray, optional
             Numpy array representing the image. If provided, img_path should be None.
-        img_path : str, optional
+        img_path : str or Path, optional
             Path to the image file. If provided, img_array should be None.
+            The path should be taken from project root.
 
         Raises
         ------
@@ -214,7 +225,8 @@ class analogBWImage:
         -----
         The image is converted to grayscale if it is RGB (24 bits/pixel) by selecting the red channel.
         The image is normalized to the range [0, 1] by dividing by 255.0.
-        If the image is already in grayscale (8 bits/pixel), it is assumed to be in the range [0, 255] and is converted to [0, 1].
+        If the image is already in grayscale (8 bits/pixel),
+        it is assumed to be in the range [0, 255] and is converted to [0, 1].
         If the image is in RGB format, it is converted to grayscale by selecting the red channel.
         If the image is in grayscale format, it is assumed to be in the range [0, 255] and is converted to [0, 1].
         """
@@ -228,7 +240,8 @@ class analogBWImage:
                 raise TypeError("img_array must be a numpy array.")
             self.img = img_array
         elif img_path is not None:
-            if not os.path.isfile(img_path):
+            img_path = ROOT.joinpath(img_path)
+            if not img_path.is_file():
                 raise FileNotFoundError(f"Image file {img_path} does not exist.")
             self.img = np.array(Image.open(img_path))
 
@@ -260,8 +273,10 @@ class analogDMDPattern:
             If pattern_array is not a 2D array or if its values are not in the range [0, 1].
         Notes
         -----
-        The pattern is expected to be a 2D numpy array with float values between 0 and 1, where 0 represents an OFF mirror and 1 represents an ON mirror.
-        The pattern can be used as an input to the generation of binaryMask object, that would eventually be sent over to a DMD.
+        The pattern is expected to be a 2D numpy array with float values between 0 and 1,
+        where 0 represents an OFF mirror and 1 represents an ON mirror.
+        The pattern can be used as an input to the generation of binaryMask object,
+        that would eventually be sent over to a DMD.
         """
 
         if pattern_array.ndim != 2:
@@ -361,14 +376,15 @@ class analogDMDPattern:
 
 class randomImagesSeries:
     """Series of random images for DMD calibration.
-    This class helps analyse the series of images taken by a camera in the image plane of a DMD displaying a sequence of patterns generated by an object `randomPattern Series`.
+    This class helps analyse the series of images taken by a camera in the image plane of a DMD
+    displaying a sequence of patterns generated by an object `randomPattern Series`.
     """
 
     def __init__(
         self,
         dim_camera: tuple = (3000, 4000),
         ROI_dim: tuple | None = None,
-        images_path: str = "./Calibration_Images/",
+        images_path: str = "Calibration_Images",
         density_array: np.ndarray = np.linspace(0, 1, 100),
     ):
         """Initialize the randomImagesSeries with the path to the images and camera dimensions.
@@ -377,21 +393,24 @@ class randomImagesSeries:
         dim_camera: tuple
             Dimensions of the camera images (height, width).
         ROI_dim: tuple | None
-            Optional dimensions of the Region of Interest (ROI) on the camera images (rows left aside to the top of the ROI, to the bottom, columns left aside to the left, and to the right).
+            Optional dimensions of the Region of Interest (ROI) on the camera images
+            (rows left aside to the top of the ROI, to the bottom, columns left aside to the left, and to the right).
         images_path: str
-            Path to the directory containing the calibration images (should be in a lossless format (PNG or BMP) and named e.g. "0.png", "1.png", ..., "num_images-1.png").
+            Path to the directory containing the calibration images
+            (should be in a lossless format (PNG or BMP) and named e.g. "0.png", "1.png", ..., "num_images-1.png").
+            The path should be taken from project root.
         density_array: np.ndarray
             Array of densities corresponding to the patterns displayed on the DMD during the calibration sequence.
         Notes
         -----
         Only images should be in the directory, no other files.
-        Note that the ROI doesn't need to include the whole beam, it can be a smaller cutout region that is constantly illuminated throughout the calibration sequence (e.g. a 100x100 pixel square in the center of the image).
+        Note that the ROI doesn't need to include the whole beam,
+        it can be a smaller cutout region that is constantly illuminated throughout the calibration sequence
+        (e.g. a 100x100 pixel square in the center of the image).
         """
-        if images_path[-1] != "/":
-            images_path += "/"
-        self.images_path = images_path
+        self.images_path = ROOT.joinpath(images_path)
         self.dim_camera = dim_camera  # Dimensions of the camera images ; (height, width) of the camera CCD
-        self.num_images = len(os.listdir(images_path))
+        self.num_images = len(os.listdir(self.images_path))
         self.density_array = density_array
         if (
             ROI_dim is not None
@@ -400,10 +419,10 @@ class randomImagesSeries:
 
         # Load and format images from the specified path
         self.img_intensities = np.empty(self.num_images, dtype=np.uint8)
-        image_format = os.path.splitext(os.listdir(images_path)[0])[-1]
+        image_format = os.path.splitext(os.listdir(self.images_path)[0])[-1]
 
         for n in range(self.num_images):
-            tmp_img_path = os.path.join(images_path, f"{n}.{image_format}")
+            tmp_img_path = self.images_path.joinpath(f"{n}.{image_format}")
             tmp_img = analogBWImage(img_path=tmp_img_path).img
             if tmp_img.size != dim_camera:
                 raise ValueError(
@@ -441,11 +460,13 @@ class randomImagesSeries:
             self.img_intensities[n] = np.mean(tmp_img)
 
     def get_group_images_by_density(self, intensity_thresh: float = 0.7):
-        """Group images by the density of mirrors ON of the pattern they're associated to. The grouping is done according to the total intensity in the ROI of the image.
+        """Group images by the density of mirrors ON of the pattern they're associated to.
+        The grouping is done according to the total intensity in the ROI of the image.
         Parameters
         ---------
         intensity_thresh: float
-            Threshold for grouping images. If the difference in average intensity between two consecutive images is greater than this value, they are considered to belong to different groups.
+            Threshold for grouping images. If the difference in average intensity between two consecutive images is
+            greater than this value, they are considered to belong to different groups.
         """
 
         self.next_d = [0]
@@ -479,12 +500,13 @@ class randomImagesSeries:
         for density in self.group_intensities:
             self.group_intensities[density] /= max_intensity
 
-    def plot_intensity_evolution(self, save_path: str | None = None):
+    def plot_intensity_evolution(self, save_path: str | Path | None = None):
         """Plots the average intensity in the ROI vs. the image index.
         Parameters
         ----------
         save_path: str | None
             Optional path to save the plot. If None, the plot is displayed but not saved.
+            The path should be taken from project root.
         """
         plt.figure(figsize=(10, 5))
         plt.plot(self.img_intensities, color="b")
@@ -492,15 +514,14 @@ class randomImagesSeries:
         for idx in self.next_d:
             plt.axvline(x=idx, color="r", linestyle="--")
 
-        plt.title("Average Intensity in ROI vs. Image Index", usetex=True)
-        plt.xlabel("Image Index", usetex=True)
-        plt.ylabel("Average Intensity (8-bit encoding)", usetex=True)
+        plt.title("Average Intensity in ROI vs. Image Index")
+        plt.xlabel("Image Index")
+        plt.ylabel("Average Intensity (8-bit encoding)")
         plt.grid(True)
 
         if save_path is not None:
-            if save_path[-1] != "/":
-                save_path += "/"
-            plt.savefig(os.path.join(save_path, "intensity_evolution.png"))
+            save_path = ROOT.joinpath(save_path)
+            plt.savefig(save_path.joinpath("intensity_evolution.png"))
         else:
             plt.show()
 
@@ -540,12 +561,13 @@ class randomImagesSeries:
         self.r_squared = 1 - (ss_res / ss_tot)
         print(f"R-squared: {self.r_squared}")
 
-    def plot_intensity_vs_density(self, save_path: str | None = None):
+    def plot_intensity_vs_density(self, save_path: str | Path | None = None):
         """Plot the average intensity in the ROI vs. the density of mirrors ON.
         Parameters
         ----------
         save_path: str | None
             Optional path to save the plot. If None, the plot is displayed but not saved.
+            The path should be taken from project root.
         """
         if not hasattr(self, "fit_coeff"):
             self.get_fit_coefficients()
@@ -581,23 +603,20 @@ class randomImagesSeries:
         )
 
         plt.grid(True)
-        plt.title(
-            f"Average Intensity in ROI vs. Density of Mirrors ON.$R^2 = {self.r_squared}$",
-            usetex=True,
-        )
-        plt.xlabel("Density of Mirrors ON", usetex=True)
-        plt.ylabel("Average Intensity in ROI (normalized)", usetex=True)
+        plt.title(f"Average Intensity in ROI vs. Density of Mirrors ON.$R^2 = {self.r_squared}$")
+        plt.xlabel("Density of Mirrors ON")
+        plt.ylabel("Average Intensity in ROI (normalized)")
 
         if save_path is not None:
-            if save_path[-1] != "/":
-                save_path += "/"
-            plt.savefig(os.path.join(save_path, "intensity_vs_density.png"))
+            save_path = ROOT.joinpath(save_path)
+            plt.savefig(save_path.joinpath("intensity_vs_density.png"))
         else:
             plt.show()
 
 
 class binaryMask:
-    """Type for binary masks ready to send to the DMD. Calibrates, corrects for distortion and performs error-diffusion on the input analog pattern inset.
+    """Type for binary masks ready to send to the DMD. Calibrates, corrects for distortion and performs error-diffusion
+    on the input analog pattern inset.
     Note that the analog pattern should be a 2D numpy array with values between 0 and 0.9.
     """
 
@@ -611,7 +630,8 @@ class binaryMask:
         beta: float = np.deg2rad(-2.5),
         gamma: float = 1.09,
     ):
-        """Initialize the binaryMask with an analog pattern inset and optional parameters for padding and distortion correction.
+        """Initialize the binaryMask with an analog pattern inset and optional parameters for
+        padding and distortion correction.
         Parameters
         ----------
         analog_pattern_inset : np.ndarray
@@ -623,7 +643,8 @@ class binaryMask:
         DMD_width : int, optional
             Width of the DMD pattern. Default is 1920.
         alpha, beta, gamma: float, optional
-            Distortion coefficients for the DMD pattern correction. Default values are -4.5 degrees for alpha, -2.5 degrees for beta, and 1.09 for gamma.
+            Distortion coefficients for the DMD pattern correction.
+            Default values are -4.5 degrees for alpha, -2.5 degrees for beta, and 1.09 for gamma.
         """
         self.analog_pattern = analogDMDPattern(analog_pattern_inset)
         self.padding = DMDPadding(padding_dim, DMD_height, DMD_width)
@@ -633,7 +654,8 @@ class binaryMask:
 
     def calibrate_pattern(self, A, B):
         """Calibrate the analog pattern using the coefficients A and B.
-        The calibration is done by solving the quadratic equation A*x^2 + B*x - y = 0 for each pixel in the analog pattern.
+        The calibration is done by solving
+        the quadratic equation A*x^2 + B*x - y = 0 for each pixel in the analog pattern.
 
         Parameters
         ----------
@@ -659,11 +681,13 @@ class binaryMask:
         self,
         ref_image_analog,
         error_diffusion_matrix=ERROR_DIFFUSION_MATRIX,
-        save_path: str = "./ED Patterns/",
+        save_path: str | Path= "ED Patterns",
     ):
         """ "Perform error diffusion on the calibrated pattern.
-        The error diffusion is done using the specified error diffusion matrix, which defines the weights and directions of the error diffusion process.
-        The reference image is expected to be a 2D numpy array with values between 0 and 0.9, representing the analog pattern.
+        The error diffusion is done using the specified error diffusion matrix,
+        which defines the weights and directions of the error diffusion process.
+        The reference image is expected to be a 2D numpy array with values between 0 and 0.9,
+        representing the analog pattern.
         A stochastic noise is added to the error diffusion process to break the symmetry and avoid artifacts.
 
         Parameters
@@ -674,8 +698,9 @@ class binaryMask:
         error_diffusion_matrix : list of tuples, optional
             Error diffusion matrix to use. Default is ERROR_DIFFUSION_MATRIX.
 
-        save_path : str, optional
+        save_path : str or Path, optional
             Path to save the resulting binary mask. Default is "./ED Patterns/".
+            The path should be taken from project root.
         Raises
         ------
         ValueError
@@ -729,9 +754,8 @@ class binaryMask:
                 v[i, j] = v_sum + ref_image_analog[i, j] - q[i, j]
 
         # If directory does not exist, create it
-        directory = save_path.split("/")[:-1]
-        if not os.path.exists(os.path.join(*directory)):
-            os.makedirs(os.path.join(*directory))
+        save_path = ROOT.joinpath(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Save the binary mask as a BMP image
         Image.fromarray((q * 255).astype(np.uint8)).save(
@@ -741,6 +765,7 @@ class binaryMask:
 
 
 if __name__ == "__main__":
+    matplotlib.rcParams['text.usetex'] = checkdep_usetex(True)
     # # Example usage for distortion correction - Gaussian Potential
     # height, width = 1080, 1920
     # x, y = np.meshgrid(np.linspace(-width//2, width//2, width), np.linspace(-height//2, height//2, height))
@@ -755,11 +780,13 @@ if __name__ == "__main__":
 
     # fig, ax = plt.subplots(1, 2, figsize=(10, 20))
     # ax[0].imshow(gaussian_potential, cmap='gray')
-    # ax[0].set_title("Original Gaussian Potential", usetex = True)
+    # ax[0].set_title("Original Gaussian Potential")
     # ax[0].axis('off')
 
     # ax[1].imshow(gaussian_pattern.pattern_corr, cmap='gray')
-    # ax[1].set_title(r"Corrected Gaussian Potential (analogDMDPattern) $\alpha="+f"{np.rad2deg(alpha):.2f}$," +r"$\beta="+f"{np.rad2deg(beta):.2f}$,"+ r"$\gamma="+f"{gamma:.2f}$", usetex = True)
+    # ax[1].set_title(r"Corrected Gaussian Potential (analogDMDPattern) $\alpha="
+    #                 + f"{np.rad2deg(alpha):.2f}$," +r"$\beta="+f"{np.rad2deg(beta):.2f}$,"
+    #                 + r"$\gamma="+f"{gamma:.2f}$")
     # ax[1].axis('off')
 
     # # Example usage for ED (on Cicero)
@@ -791,12 +818,12 @@ if __name__ == "__main__":
     cicero_mask.calibrate_pattern(0.5, 0.5)
 
     cicero_mask.perform_error_diffusion(
-        cicero_image.img, save_path="./ED Patterns/Cicero_test/Cicero_image_ED.bmp"
+        cicero_image.img, save_path="ED Patterns/Cicero_test/Cicero_image_ED.bmp"
     )
 
     fig, ax = plt.subplots(2, 2, figsize=(20, 20))
     ax[0, 0].imshow(cicero_image.img, cmap="gray")
-    ax[0, 0].set_title("Original Cicero Image", usetex=True)
+    ax[0, 0].set_title("Original Cicero Image")
     ax[0, 0].axis("off")
 
     ax[0, 1].imshow(cicero_mask.analog_pattern.pattern_corr, cmap="gray")
@@ -806,17 +833,17 @@ if __name__ == "__main__":
         + r"$\beta="
         + f"{np.rad2deg(-2.5):.2f}$,"
         + r"$\gamma=1.09$",
-        usetex=True,
     )
     ax[0, 1].axis("off")
 
     ax[1, 0].imshow(cicero_mask.calibrated_pattern, cmap="gray")
-    ax[1, 0].set_title("Calibrated Cicero Pattern", usetex=True)
+    ax[1, 0].set_title("Calibrated Cicero Pattern")
     ax[1, 0].axis("off")
 
     ax[1, 1].imshow(cicero_mask.binary_mask, cmap="gray")
-    ax[1, 1].set_title("Binary Mask after Error Diffusion", usetex=True)
+    ax[1, 1].set_title("Binary Mask after Error Diffusion")
     ax[1, 1].axis("off")
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig(ROOT.joinpath("ED Patterns/Cicero_test/cicero_patterns.png"), dpi=300, bbox_inches="tight")
+    # plt.show()
