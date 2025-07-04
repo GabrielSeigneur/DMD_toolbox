@@ -1,0 +1,22 @@
+{
+    // "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/dev/bin/python",
+    "restructuredtext.linter.doc8.executablePath": "${workspaceFolder}/.pixi/envs/dev/bin/doc8",
+    "restructuredtext.linter.rstcheck.executablePath": "${workspaceFolder}/.pixi/envs/dev/bin/rstcheck",
+    "restructuredtext.linter.rst-lint.executablePath": "${workspaceFolder}/.pixi/envs/dev/bin/rst-lint",
+    "esbonio.server.pythonPath": "${workspaceFolder}/.pixi/envs/dev/bin/python",
+    "esbonio.sphinx.buildDir": "${workspaceFolder}/docs/build",
+    "esbonio.sphinx.confDir": "${workspaceFolder}/docs/source",
+    "esbonio.server.logLevel": "debug",
+    "restructuredtext.linter.rstcheck.extraArgs": [
+        "--ignore D001"
+    ],
+    "restructuredtext.linter.doc8.extraArgs": [
+        "--ignore D001"
+    ],
+    "cSpell.enabledFileTypes": {
+        "python": false
+    },
+    "markdownlint.config": {
+        "MD041": false,
+    }
+}
