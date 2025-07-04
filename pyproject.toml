@@ -27,10 +27,14 @@ dependencies = [
 [project.optional-dependencies]
 docs = [
     "sphinx",
+    "pydata-sphinx-theme",
+    "autodoc",
+    "pydantic",
+    "sphinx-autodoc-typehints",
+    "myst-nb",
     "myst-parser",
     "sphinx-copybutton",
-    "furo",
-    "doc8",
+    "doc8", # esbonio extension
     "rstcheck",
     "esbonio",
     "pandoc",
