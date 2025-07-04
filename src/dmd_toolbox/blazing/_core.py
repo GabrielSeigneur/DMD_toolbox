@@ -319,11 +319,4 @@ class DMDSetup:
         plt.savefig(self.path_file.joinpath("Phase_Shifts.png"), dpi=300, bbox_inches="tight")
 
 
-if __name__ == "__main__":
-    matplotlib.rcParams['text.usetex'] = checkdep_usetex(True)
-    dmd = DMDSetup()
-    dmd.get_all_phase_shifts()
-    dmd.plot_phase_shift()
-    print(
-        f"Blazed orders for latitude {np.rad2deg(dmd.lat_planar):.2f}°: {dmd.blazed_orders}"
-    )
+# if __name__ == "__main__":

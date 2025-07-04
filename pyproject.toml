@@ -21,6 +21,7 @@ dependencies = [
     "pillow",
     "ipykernel",
     "pip",
+    "jupyter"
 ]
 
 [project.optional-dependencies]
